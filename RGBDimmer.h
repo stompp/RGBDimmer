@@ -89,9 +89,10 @@ protected:
     ColorAnimation c;
 
     // TEMPERATURE
-    RGBOutput temperatureToRGB(unsigned int t)
+    RGBOutput temperatureToRGB(uint16_t t)
     {
-        return RGBOutput::FROM_TEMPERATURE(t);
+        RGBOutput o = RGBOutput::FROM_TEMPERATURE(t);
+        return o;
     }
 
     RGBOutput temperatureToRGB()
@@ -209,7 +210,7 @@ protected:
         return temperatureToRGB();
     }
 
-    void resetTempTransition(uint8_t prev, uint8_t target)
+    void resetTempTransition(uint16_t prev, uint16_t target)
     {
         tempTrans.reset();
         prevTemp = prev;
@@ -477,8 +478,8 @@ public:
 
         if (mode != MODE_TEMPERATURE)
         {
-            temperature = t;
-            resetTempTransition();
+          
+            resetTempTransition(t,t);
             setMode(MODE_TEMPERATURE);
             return;
         }
@@ -727,7 +728,7 @@ public:
             setMode((mode == MODE_TEMPERATURE ? MODE_COLOR : MODE_TEMPERATURE));
     }
 
-    void setBrightness(uint16_t b)
+    void setBrightness(uint8_t b)
     {
         // uint16_t b = constrain(br, 0, BRIGHTNESS_MAX);
 
@@ -837,7 +838,7 @@ public:
         }
     }
 
-    void setSaturation(uint16_t s)
+    void setSaturation(uint8_t s)
     {
         if (status == STATUS_ON && mode == MODE_COLOR)
             saturation = s % (SATURATION_MAX + 1);
