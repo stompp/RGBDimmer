@@ -5,7 +5,6 @@
 #include <millis_utils.h>
 #include "rgb_dimmer_commands.h"
 
-
 #define W_PREFS 0
 #define C_PREFS 8
 
@@ -54,7 +53,6 @@ class RGBDimmer
 {
 
 protected:
-
     // system
     byte mode;
     byte prevMode;
@@ -78,9 +76,6 @@ protected:
 
     uint16_t saturation;
 
-    // Output
-    ColorAnimation c;
-
     // Transition timers
     MillisTimer fadeOutTimer;
     MillisTimer modeTransitionTimer;
@@ -90,11 +85,13 @@ protected:
     RGBOutput rgbModeOutput;
     RGBOutput rgbModepPrevOutput;
 
+    // Output and animation
+    ColorAnimation c;
+
+    // TEMPERATURE
     RGBOutput temperatureToRGB(unsigned int t)
     {
-
-        RGBOutput d = RGBOutput::FROM_TEMPERATURE(t);
-        return d;
+        return RGBOutput::FROM_TEMPERATURE(t);
     }
 
     RGBOutput temperatureToRGB()
@@ -102,14 +99,13 @@ protected:
         return temperatureToRGB(temperature);
     }
 
+
+
     RGBOutput hueToRGB(uint16_t h)
     {
-        Color hc;
-        hc.setHSB(h, saturation, BRIGHTNESS_MAX);
-
-        RGBOutput o(hc.red(), hc.green(), hc.blue());
-        return o;
+        return RGBOutput::FROM_HSV(h, saturation, BRIGHTNESS_MAX);
     }
+    
     RGBOutput hueToRGB()
     {
         return hueToRGB(hue);
@@ -137,27 +133,29 @@ protected:
             {
                 if (prevMode == MODE_TEMPERATURE)
                     out = RGBOutput::PROGRESSION100(progress, temperatureToRGB(), hueToRGB());
-                if (prevMode == MODE_RGB)
+                else if (prevMode == MODE_RGB)
                     out = RGBOutput::PROGRESSION100(progress, rgbModeOutput, hueToRGB());
             }
             else if (mode == MODE_TEMPERATURE)
             {
                 if (prevMode == MODE_COLOR)
                     out = RGBOutput::PROGRESSION100(progress, hueToRGB(), temperatureToRGB());
-                if (prevMode == MODE_RGB)
+                else if (prevMode == MODE_RGB)
                     out = RGBOutput::PROGRESSION100(progress, rgbModeOutput, temperatureToRGB());
             }
             else if (mode == MODE_RGB)
             {
                 if (prevMode == MODE_COLOR)
                     out = RGBOutput::PROGRESSION100(progress, hueToRGB(), rgbModeOutput);
-                if (prevMode == MODE_TEMPERATURE)
+                else if (prevMode == MODE_TEMPERATURE)
                     out = RGBOutput::PROGRESSION100(progress, temperatureToRGB(), rgbModeOutput);
             }
         }
 
         return out;
     }
+   
+   
     uint16_t hueTransition()
     {
 
@@ -173,7 +171,7 @@ protected:
         RGBOutput o;
         if (hueTransitionMode == TRANSITION_MODE_TONE)
             o = hueToRGB(h);
-        if (hueTransitionMode == TRANSITION_MODE_RGB)
+        else if (hueTransitionMode == TRANSITION_MODE_RGB)
             o = RGBOutput::PROGRESSION(millis(), hueTrans.startTime, hueTrans.startTime + toneTransitionTime, hueToRGB(prevHue), hueToRGB());
 
         if (transitionsEnabled && toneTransitionsEnabled)
@@ -182,17 +180,19 @@ protected:
         return hueToRGB();
     }
 
-    void resetHueTransition(uint16_t pHue, uint16_t nHue)
+    void resetHueTransition(uint16_t prev, uint16_t target)
     {
         hueTrans.reset();
-        prevHue = pHue;
-        hue = nHue;
+        prevHue = prev;
+        hue = target;
     }
 
     void resetHueTransition()
     {
         resetHueTransition(hue, hue);
     }
+
+
 
     uint16_t tempTransition()
     {
@@ -209,11 +209,11 @@ protected:
         return temperatureToRGB();
     }
 
-    void resetTempTransition(uint16_t p, uint16_t n)
+    void resetTempTransition(uint8_t prev, uint8_t target)
     {
         tempTrans.reset();
-        prevTemp = p;
-        temperature = n;
+        prevTemp = prev;
+        temperature = target;
     }
 
     void resetTempTransition()
@@ -244,6 +244,7 @@ protected:
         brightness = target;
         brightTransition.reset();
     }
+   
     void resetAllTranstions()
     {
         resetTempTransition();
@@ -257,7 +258,6 @@ protected:
         if (rgbModeTransitionTimer.isActive() && transitionsEnabled && toneTransitionsEnabled)
         {
             return RGBOutput::PROGRESSION100(rgbModeTransitionTimer.progress100(), rgbModepPrevOutput, rgbModeOutput);
-            // return rgbModepPrevOutput.progress100To(rgbModeTransitionTimer.progress100(),rgbModeOutput);
         }
         else
         {
@@ -266,82 +266,31 @@ protected:
         return rgbModeOutput;
     }
 
-    void update()
+    RGBOutput outputTone()
     {
-
-        if (status == STATUS_OFF)
-        {
-            return;
-        }
-        else if (c.isAnimating())
-        {
-
-            if ((c.isBrightnessAnimating()) && !c.isColorAnimating())
-            {
-                if (modeTransitionTimer.isActive())
-                {
-                    modeTransitionTimer.check();
-                    RGBOutput o = modeTranstionOutput(modeTransitionTimer.progress100());
-                    c.setRGB(o.red, o.green, o.blue);
-                }
-                else if (mode == MODE_COLOR)
-                {
-
-                    RGBOutput o = hueTranstionRGB();
-                    c.setRGB(o.red, o.green, o.blue);
-                }
-                else if (mode == MODE_TEMPERATURE)
-                {
-                    RGBOutput o = tempTransitionRGB();
-                    c.setRGB(o.red, o.green, o.blue);
-                }
-            }
-
-            c.updateAnimation();
-        }
-        else if (modeTransitionTimer.isActive())
+        RGBOutput o;
+        if (modeTransitionTimer.isActive())
         {
             modeTransitionTimer.check();
-            RGBOutput o = modeTranstionOutput(modeTransitionTimer.progress100());
-            c.setRGB(o.red, o.green, o.blue);
+            o = modeTranstionOutput(modeTransitionTimer.progress100());
         }
         else if (mode == MODE_RGB)
         {
 
-            RGBOutput o = rgbModeTransition();
-            c.setRGB(o.red, o.green, o.blue);
+            o = rgbModeTransition();
         }
         else if (mode == MODE_TEMPERATURE)
         {
 
-            RGBOutput o = tempTransitionRGB();
-            c.setRGB(o.red, o.green, o.blue);
+            o = tempTransitionRGB();
         }
         else if (mode == MODE_COLOR)
         {
 
-            RGBOutput o = hueTranstionRGB();
-            c.setRGB(o.red, o.green, o.blue);
-        }
-    }
-
-    bool canSetTone()
-    {
-
-        if(c.isColorAnimating()){
-            return false;
+            o = hueTranstionRGB();
         }
 
-        if (isOff())
-        {
-
-            if (setStatusOnToneSet)
-            {
-                setStatus(STATUS_ON);
-            }
-        }
-
-        return !c.isColorAnimating() && isOn();
+        return o;
     }
 
     uint16_t outputBrightness()
@@ -358,7 +307,7 @@ protected:
             {
 
                 fadeOutTimer.check();
-                b = mapFromStartToEnd(fadeOutTimer.progress100(), 0UL, 100UL, (unsigned long)brightness, 0UL);
+                b = interpolate(fadeOutTimer.progress100(), 0UL, 100UL, (unsigned long)brightness, 0UL);
             }
 
             if (!transitionsEnabled || !brightnessTransitionsEnabled)
@@ -366,6 +315,50 @@ protected:
         }
 
         return b;
+    }
+   
+    void update()
+    {
+
+        if (status == STATUS_OFF)
+        {
+            return;
+        }
+
+        if (c.isAnimating())
+        {
+
+            if ((c.isBrightnessAnimating()) && !c.isColorAnimating())
+            {
+                c.set(outputTone());
+            }
+
+            c.updateAnimation();
+        }
+        else
+        {
+            c.set(outputTone());
+        }
+    }
+
+    bool canSetTone()
+    {
+
+        if (c.isColorAnimating())
+        {
+            return false;
+        }
+
+        if (isOff())
+        {
+
+            if (setStatusOnToneSet)
+            {
+                setStatus(STATUS_ON);
+            }
+        }
+
+        return !c.isColorAnimating() && isOn();
     }
 
 public:
@@ -445,13 +438,12 @@ public:
         update();
 
         RGBOutput o = RGBOutput(c.red(), c.green(), c.blue(), b, BRIGHTNESS_MAX);
-  
+
         return o;
     }
 
     void debug()
     {
-
 
         RGBOutput o = getRGB();
         Color c = Color(o.red, o.green, o.blue);
@@ -475,7 +467,6 @@ public:
 #ifdef HAVE_HWSERIAL1
         debugValue("HSB", s, &Serial1);
 #endif
-
     }
 
     void setTemperature(uint16_t t)
@@ -505,12 +496,10 @@ public:
             resetTempTransition(temperature, t);
         }
 
-        // tempTrans.active = false;
-        // prevTemp = temperature;
-        // temperature = t;
+     
 
         c.setColorAnimation(NO_ANIMATION);
-        // setTemperature();
+      
     }
 
     void setHue(uint16_t h)
@@ -518,12 +507,11 @@ public:
         if (!canSetTone())
             return;
 
-        uint16_t nh = (h % (HUE_MAX + 1));
+        uint16_t nh = hue_in_range(h);
 
         if (mode != MODE_COLOR)
         {
-            hue = nh;
-            resetHueTransition();
+            resetHueTransition(nh, nh);
             setMode(MODE_COLOR);
             return;
         }
@@ -532,9 +520,6 @@ public:
         {
 
             resetHueTransition(c.hue(), nh);
-            // hueTrans.active = false;
-            // prevHue = c.hue;
-            // hue = nh;
             if (c.isBrightnessAnimating())
                 return;
         }
@@ -544,13 +529,10 @@ public:
             if (nh != hue)
             {
                 resetHueTransition(hue, nh);
-                // prevHue = hue;
-                // hue = nh;
-                // hueTrans.active = false;
             }
         }
 
-         c.setColorAnimation(NO_ANIMATION);
+        c.setColorAnimation(NO_ANIMATION);
     }
 
     void setTone(uint16_t tone)
@@ -592,11 +574,13 @@ public:
         }
     }
 
-    void setRGB(const uint8_t* rgb){
-         setRGB(rgb[0],rgb[1],rgb[2]);
+    void setRGB(const uint8_t *rgb)
+    {
+        setRGB(rgb[0], rgb[1], rgb[2]);
     }
-    void setRGB(uint8_t* rgb){
-        setRGB((const uint8_t*)rgb);
+    void setRGB(uint8_t *rgb)
+    {
+        setRGB((const uint8_t *)rgb);
     }
 
     void setAnimation(uint16_t a)
@@ -604,19 +588,22 @@ public:
         if (isOff())
             return;
 
-        // if (a == c.animationMode)
-        //     return;
-
         if (a == NO_ANIMATION)
         {
+            if (c.isHueAnimating())
+            {
+                resetHueTransition(c.hue(), c.hue());
+            }
+
+            if(c.isBrightnessAnimating()){
+                resetBrightnessTranstion(c.brightness(),c.brightness());
+            }
             c.setAnimation(a);
         }
         else
         {
-
-            if ((mode == MODE_COLOR) || ( a == AnimationFunctions::BEATING))
+            if ((mode == MODE_COLOR) || (a == AnimationFunctions::BEATING))
             {
-               
                 c.setAnimation(a);
             }
         }
@@ -709,7 +696,6 @@ public:
     void changeStatus()
     {
         setStatus(status == STATUS_ON ? STATUS_OFF : STATUS_ON);
-        // status = status == STATUS_ON ? STATUS_OFF : STATUS_ON;
     }
 
     void setMode(uint8_t m)
@@ -753,6 +739,7 @@ public:
         {
             if (status == STATUS_OFF)
             {
+                
                 status = STATUS_ON;
                 brightness = 0;
                 brightTransition.active = false;
@@ -784,11 +771,7 @@ public:
                 doIt = true;
             else
             {
-                // prevBrightness  = 0;
-                // setBrightness(0);
                 setBrightness(D_BRIGHTNESS_GAP);
-                // status = STATUS_ON;
-                // brightness = D_BRIGHTNESS_GAP;
             }
         }
         else if (v < 0)
@@ -820,7 +803,7 @@ public:
             //   resetTempTransition();
             uint16_t t = dimValue(temperature, D_TEMP_GAP, TEMPERATURE_MIN, TEMPERATURE_MAX, false);
             setTemperature(t);
-            debug();
+            // debug();
         }
         else if (mode == MODE_COLOR)
         {
@@ -841,7 +824,7 @@ public:
             // resetTempTransition();
             uint16_t t = dimValue(temperature, (int)(-D_TEMP_GAP), (uint16_t)TEMPERATURE_MIN, (uint16_t)TEMPERATURE_MAX, false);
             setTemperature(t);
-            debug();
+            // debug();
         }
         else if (mode == MODE_COLOR)
         {
@@ -850,7 +833,7 @@ public:
                 hue = HUE_MAX;
             else
                 dimValue(hue, -D_HUE_GAP, (uint16_t)0, (uint16_t)HUE_MAX);
-            // displayColor();
+           
         }
     }
 
@@ -895,16 +878,15 @@ public:
         // OFF
         case 2:
             off();
-          
+
             break;
         // ON / CHANGE WHITE MODE OR COLOR MODE
         case 3:
 
             if (status == STATUS_OFF)
             {
-         
+
                 on();
-               
             }
             else if (status == STATUS_ON)
             {
